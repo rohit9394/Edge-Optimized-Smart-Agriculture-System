@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Farm Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root { --success: #2ecc71; --warning: #f39c12; --danger: #e74c3c; --dark: #2c3e50; --bg: #ecf0f1; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); padding: 20px; color: var(--dark); }
+        .container { max-width: 900px; margin: 0 auto; }
+        
+        .card { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
+
+        /* Status Badge */
+        .status-badge { padding: 5px 15px; border-radius: 20px; color: white; font-weight: bold; }
+        .bg-ok { background: var(--success); }
+        .bg-warn { background: var(--warning); }
+        .bg-crit { background: var(--danger); animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+
+        /* Sections we will toggle */
+        #ai-section, #sensor-section { transition: opacity 0.5s; }
+        .hidden { display: none !important; }
+
+        /* Alerts */
+        .alert-item { background: #fadbd8; border-left: 5px solid #c0392b; color: #c0392b; padding: 10px; margin-bottom: 8px; border-radius: 4px; }
+        
+        /* AI Box */
+        .ai-box { background: #e8f8f5; border-left: 5px solid var(--success); padding: 20px; }
+        .ai-text { font-size: 1.8rem; font-weight: bold; color: var(--success); margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+            <h1 style="margin:0;"><i class="fas fa-seedling"></i> Smart Farm</h1>
+            <small>Last Update: <span id="last-update">--:--:--</span></small>
+        </div>
+        <div id="sys-status" class="status-badge bg-ok">Waiting...</div>
+    </div>
+
+    <div class="card">
+        <h3>Target Crop: <span id="target-crop" style="color:var(--success)">--</span></h3>
+        <div style="display:flex; gap:10px;">
+            <select id="cropSelect" style="flex-grow:1; padding:10px;">
+                <option value="" disabled selected>-- Select Crop --</option>
+                <option value="rice">Rice</option>
+                <option value="maize">Maize</option>
+                <option value="chickpea">Chickpea</option>
+                <option value="kidneybeans">Kidney Beans</option>
+                <option value="mothbeans">Moth Beans</option>
+                <option value="mungbean">Mung Bean</option>
+                <option value="banana">Banana</option>
+                <option value="mango">Mango</option>
+                <option value="grapes">Grapes</option>
+                <option value="watermelon">Watermelon</option>
+                <option value="muskmelon">Muskmelon</option>
+                <option value="apple">Apple</option>
+                <option value="orange">Orange</option>
+                <option value="papaya">Papaya</option>
+            </select>
+            <button onclick="sendCrop()" style="padding:10px 20px; background:var(--dark); color:white; border:none; cursor:pointer; border-radius:5px;">Set Crop</button>
+        </div>
+    </div>
+
+    <div id="alert-section" class="card hidden">
+        <h3 style="margin-top:0;"><i class="fas fa-exclamation-circle"></i> Active Alerts</h3>
+        <div id="alert-list"></div>
+    </div>
+
+    <div id="ai-section" class="card ai-box hidden">
+        <h3 style="margin:0; color:#555;">AI Fertilizer Recommendation</h3>
+        <div id="fert-result" class="ai-text">--</div>
+    </div>
+
+    <div id="sensor-section" class="grid">
+        <div class="card"><h3>Temp</h3><div id="temp" style="font-size:1.5rem;">--</div></div>
+        <div class="card"><h3>Hum</h3><div id="hum" style="font-size:1.5rem;">--</div></div>
+        <div class="card"><h3>Volt</h3><div id="volt" style="font-size:1.5rem;">--</div></div>
+        <div class="card"><h3>N</h3><div id="n" style="font-size:1.5rem;">--</div></div>
+        <div class="card"><h3>P</h3><div id="p" style="font-size:1.5rem;">--</div></div>
+        <div class="card"><h3>K</h3><div id="k" style="font-size:1.5rem;">--</div></div>
+    </div>
+
+</div>
+
+<script>
+    function update() {
+        fetch('/api/data')
+        .then(r => r.json())
+        .then(data => {
+            // --- 1. FILL DATA VARIABLES ---
+            const s = data.sensors || {};
+            const alerts = data.alerts || {};
+            const alertKeys = Object.keys(alerts);
+            
+            document.getElementById('temp').innerText = (s.Temp !== undefined) ? s.Temp + " °C" : "--";
+            document.getElementById('hum').innerText  = (s.Hum  !== undefined) ? s.Hum + " %" : "--";
+            document.getElementById('volt').innerText = (s.Volt !== undefined) ? s.Volt + " V" : "--";
+            document.getElementById('n').innerText    = s.N ?? "--";
+            document.getElementById('p').innerText    = s.P ?? "--";
+            document.getElementById('k').innerText    = s.K ?? "--";
+            
+            let rawCrop = data.crop_target || "--";
+            document.getElementById('target-crop').innerText = rawCrop.charAt(0).toUpperCase() + rawCrop.slice(1);
+            document.getElementById('last-update').innerText = data.last_update;
+
+            // --- 2. LOGIC VARIABLES ---
+            const sensorSection = document.getElementById('sensor-section');
+            const aiSection = document.getElementById('ai-section');
+            const alertSection = document.getElementById('alert-section');
+            const alertList = document.getElementById('alert-list');
+            const statusBadge = document.getElementById('sys-status');
+            const fertResult = document.getElementById('fert-result');
+
+            const hasNutrientIssue = alertKeys.some(k => ['N', 'P', 'K'].includes(k));
+            const hasEnvIssue = alertKeys.some(k => ['Temp', 'Hum', 'Volt'].includes(k));
+
+            // Populate Alerts
+            alertList.innerHTML = "";
+            if (alertKeys.length > 0) {
+                alertSection.classList.remove('hidden');
+                for (const [k, msg] of Object.entries(alerts)) {
+                    alertList.innerHTML += `<div class="alert-item"><b>${k}:</b> ${msg}</div>`;
+                }
+            } else {
+                alertSection.classList.add('hidden');
+            }
+
+            // --- 3. VISIBILITY LOGIC (Traffic Control) ---
+            
+            if (hasNutrientIssue) {
+                // CASE A: Nutrient Issue -> Show EVERYTHING (Alerts + AI + Sensors)
+                statusBadge.className = "status-badge bg-crit";
+                statusBadge.innerText = "CRITICAL: NUTRIENTS";
+                
+                sensorSection.classList.remove('hidden'); 
+                aiSection.classList.remove('hidden');
+                
+                fertResult.style.color = "#e74c3c";
+                
+                // FIXED: Look for 'fertilizer_recommendation' OR 'fertilizer_prediction'
+                fertResult.innerText = data.fertilizer_recommendation || data.fertilizer_prediction || "Analyzing...";
+                
+            } else if (hasEnvIssue) {
+                // CASE B: Env Issue -> HIDE Sensors & AI, Show Alert Only
+                statusBadge.className = "status-badge bg-warn";
+                statusBadge.innerText = "WARNING: ENVIRONMENT";
+                
+                sensorSection.classList.add('hidden');
+                aiSection.classList.add('hidden');
+                
+            } else {
+                // CASE C: Optimal -> Show Sensors Only (Hide AI & Alerts)
+                statusBadge.className = "status-badge bg-ok";
+                statusBadge.innerText = "SYSTEM OPTIMAL";
+                
+                sensorSection.classList.remove('hidden');
+                aiSection.classList.add('hidden');
+            }
+        });
+    }
+
+    function sendCrop() {
+        let c = document.getElementById('cropSelect').value;
+        if (!c) { alert("Please select a crop first."); return; }
+        
+        fetch('/api/set-crop', {
+            method:'POST', 
+            headers:{'Content-Type':'application/json'}, 
+            body:JSON.stringify({crop:c})
+        });
+    }
+
+    setInterval(update, 2000);
+</script>
+
+</body>
+</html>
