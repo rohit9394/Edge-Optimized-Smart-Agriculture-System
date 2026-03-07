@@ -372,7 +372,6 @@ http://localhost:8000
 
 **Rohit Sharma**
 
-Digital System Lab Project  
 IoT + Machine Learning based Smart Agriculture System
 
 ---
